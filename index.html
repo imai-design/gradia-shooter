@@ -98,6 +98,10 @@ function keyPressed(k){
   if(k==='pause' && game.state==='play') game.paused = !game.paused;
   if(k==='manual') game.manual = !game.manual;
   if(k==='cheat' && game.state==='title'){ game.cheat = !game.cheat; SFX.power(); }
+  if(game.state==='title' && (k==='left'||k==='right')){
+    game.shipIndex = (game.shipIndex + (k==='right'?1:SHIPS.length-1)) % SHIPS.length;
+    localStorage.setItem('gradia_ship', game.shipIndex); SFX.power();
+  }
   if(k==='start'){
     if(game.state==='title') startGame();
     else if(game.state==='gameover'||game.state==='allclear') toTitle();
@@ -115,7 +119,14 @@ function handleTouch(e,isStart){
   const tx = (t.clientX - r.left) / r.width * W;
   const ty = (t.clientY - r.top)  / r.height * H;
   if(isStart){
-    if(game.state!=='play'){ if(game.state==='title') startGame(); else toTitle(); return; }
+    if(game.state!=='play'){
+      if(game.state==='title'){
+        // タイトル：左1/4=前の機体 / 右1/4=次の機体 / 中央=スタート
+        if(tx < W*0.25){ game.shipIndex=(game.shipIndex+SHIPS.length-1)%SHIPS.length; localStorage.setItem('gradia_ship',game.shipIndex); SFX.power(); return; }
+        if(tx > W*0.75){ game.shipIndex=(game.shipIndex+1)%SHIPS.length; localStorage.setItem('gradia_ship',game.shipIndex); SFX.power(); return; }
+        startGame(); return;
+      } else { toTitle(); return; }
+    }
     if(tx > W*0.78 && ty < H*0.22){ tryPowerUp(); return; } // 右上＝武装発動
   }
   touchAim = {x:tx, y:ty};
@@ -311,6 +322,7 @@ const player = {
   gauge:0,                        // パワーアップゲージのカーソル(0..5, -1で未選択)
   alive:true, invuln:0, respawn:0,
   shootCd:0, missileCd:0,
+  shipShootCd:0.14, shot:'rapid', // 自機固有の連射間隔・ショット種
   trail:[],                       // オプション追従用の軌跡
 };
 function resetPlayerLoadout(keepNothing){
@@ -318,6 +330,78 @@ function resetPlayerLoadout(keepNothing){
   player.options=0; player.shield=0; player.gauge=-1; player.trail.length=0;
 }
 function playerSpeed(){ return player.baseSpeed * (1 + player.speedLv*0.34); }
+
+//============================================================
+//  自機ラインナップ（Codex協働デザイン・6機）
+//  draw()は原点中心・右向き・全長約40pxで描画
+//============================================================
+const SHIPS = [
+  { id:'hayate', name:'蒼迅ハヤテ', concept:'機首を細めた高速迎撃機', body:'#E8F7FF', accent:'#168CFF', glow:'#63F3FF',
+    speed:5, fire:4, shot:'rapid',
+    draw(){
+      ctx.fillStyle=this.body; ctx.beginPath(); ctx.moveTo(24,0); ctx.lineTo(-20,-7); ctx.lineTo(-20,7); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=this.accent;
+      ctx.beginPath(); ctx.moveTo(-7,-5); ctx.lineTo(-18,-15); ctx.lineTo(5,-6); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-7,5); ctx.lineTo(-18,15); ctx.lineTo(5,6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=this.glow; ctx.beginPath(); ctx.arc(-20,0,4,0,6.283); ctx.fill();
+      ctx.fillStyle='#ffd36b'; ctx.beginPath(); ctx.arc(7,0,2.5,0,6.283); ctx.fill();
+    } },
+  { id:'guren', name:'紅蓮バスター', concept:'巨大砲身で正面突破する重攻撃機', body:'#7A1824', accent:'#FF563D', glow:'#FFB12B',
+    speed:2, fire:2, shot:'heavy',
+    draw(){
+      ctx.fillStyle=this.body; ctx.beginPath();
+      ctx.moveTo(22,0); ctx.lineTo(5,-15); ctx.lineTo(-20,-11); ctx.lineTo(-20,11); ctx.lineTo(5,15); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=this.accent; ctx.fillRect(-8,-4,34,8);
+      ctx.fillStyle=this.glow; ctx.fillRect(24,-3,6,6);
+      ctx.fillStyle=this.accent; ctx.fillRect(-22,-9,5,5); ctx.fillRect(-22,4,5,5);
+    } },
+  { id:'soryu', name:'双龍スプリッター', concept:'双胴連結の制圧戦闘機', body:'#234F9C', accent:'#8ED6FF', glow:'#D7FFFF',
+    speed:3, fire:3, shot:'wide',
+    draw(){
+      ctx.fillStyle=this.body;
+      ctx.beginPath(); ctx.moveTo(21,-8); ctx.lineTo(-17,-15); ctx.lineTo(-12,-5); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(21,8); ctx.lineTo(-12,5); ctx.lineTo(-17,15); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=this.accent; ctx.fillRect(-12,-3,25,6);
+      ctx.fillStyle=this.glow; ctx.beginPath(); ctx.arc(-15,-10,3,0,6.283); ctx.fill();
+      ctx.beginPath(); ctx.arc(-15,10,3,0,6.283); ctx.fill();
+    } },
+  { id:'kogane', name:'黄金レイライン', concept:'環状炉から光線を放つ発掘機', body:'#D19A22', accent:'#FFF0A0', glow:'#7CFFDF',
+    speed:3, fire:2, shot:'beam',
+    draw(){
+      ctx.fillStyle=this.body; ctx.beginPath();
+      ctx.moveTo(22,0); ctx.lineTo(2,-7); ctx.lineTo(-18,-10); ctx.lineTo(-12,0); ctx.lineTo(-18,10); ctx.lineTo(2,7); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=this.accent;
+      ctx.beginPath(); ctx.moveTo(-2,-7); ctx.lineTo(-12,-14); ctx.lineTo(-16,-10); ctx.lineTo(-6,-6); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-2,7); ctx.lineTo(-6,6); ctx.lineTo(-16,10); ctx.lineTo(-12,14); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=this.accent; ctx.beginPath(); ctx.arc(-3,0,9,0,6.283); ctx.fill();
+      ctx.fillStyle=this.glow; ctx.beginPath(); ctx.arc(-3,0,5,0,6.283); ctx.fill();
+    } },
+  { id:'shiden', name:'紫電ファントム', concept:'刃の輪郭で切り裂くステルス機', body:'#241B46', accent:'#A85CFF', glow:'#FF62E6',
+    speed:4, fire:3, shot:'twin',
+    draw(){
+      ctx.fillStyle=this.body; ctx.beginPath();
+      ctx.moveTo(23,0); ctx.lineTo(-8,-16); ctx.lineTo(-3,-5); ctx.lineTo(-20,0); ctx.lineTo(-3,5); ctx.lineTo(-8,16); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=this.accent; ctx.beginPath();
+      ctx.moveTo(8,0); ctx.lineTo(-2,-4); ctx.lineTo(-10,0); ctx.lineTo(-2,4); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=this.glow; ctx.beginPath(); ctx.arc(-8,-16,2,0,6.283); ctx.fill();
+      ctx.beginPath(); ctx.arc(-8,16,2,0,6.283); ctx.fill();
+    } },
+  { id:'genbu', name:'玄武フォートレス', concept:'移動砲台の超重装甲機', body:'#31583B', accent:'#8FCB62', glow:'#D8FF70',
+    speed:1, fire:5, shot:'rapid',
+    draw(){
+      ctx.fillStyle=this.body; ctx.fillRect(-16,-10,28,20);
+      ctx.fillStyle=this.accent; ctx.beginPath(); ctx.moveTo(22,0); ctx.lineTo(10,-8); ctx.lineTo(10,8); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=this.accent; ctx.fillRect(-5,-16,13,6); ctx.fillRect(-5,10,13,6);
+      ctx.fillStyle=this.glow; ctx.fillRect(-19,-7,4,4); ctx.fillRect(-19,-2,4,4); ctx.fillRect(-19,3,4,4);
+    } },
+];
+function curShip(){ return SHIPS[game.shipIndex] || SHIPS[0]; }
+function applyShip(){
+  const s=curShip();
+  if(!game.cheat){ player.baseSpeed = 150 + s.speed*30; } // 180..300（最強モードは速い既定値を維持）
+  player.shipShootCd = 0.20 - s.fire*0.022;               // 連射間隔 fire5:0.09 fire1:0.178
+  player.shot = s.shot;
+}
 
 // 最強モード（チート）：全武装MAX＋シールド満タン
 function applyCheatLoadout(){
@@ -347,13 +431,25 @@ function tryPowerUp(){
 let bullets=[], missiles=[], enemies=[], ebullets=[], powerups=[], particles=[], floats=[];
 let boss=null;
 
-function spawnBullet(x,y,vx,vy,kind){ bullets.push({x,y,vx,vy,kind,w:kind==='laser'?26:10,h:kind==='laser'?5:4,life:2,pierce:kind==='laser'}); }
+function spawnBullet(x,y,vx,vy,kind){
+  bullets.push({x,y,vx,vy,kind,
+    w: kind==='laser'?26 : kind==='heavy'?16 : 10,
+    h: kind==='laser'?5  : kind==='heavy'?12 : 4,
+    life:2, pierce:(kind==='laser')});
+}
 function fireWeapons(ox,oy){
-  // 通常 or レーザー
   if(player.laser){
     spawnBullet(ox+20,oy,1100,0,'laser');
   }else{
-    spawnBullet(ox+20,oy,720,0,'shot');
+    // 自機固有の基本ショット
+    switch(player.shot){
+      case 'heavy': spawnBullet(ox+20,oy,560,0,'heavy'); break;                       // 紅蓮：大型弾
+      case 'wide':  spawnBullet(ox+20,oy,720,0,'shot');                               // 双龍：三方向
+                    spawnBullet(ox+16,oy-5,690,-250,'shot'); spawnBullet(ox+16,oy+5,690,250,'shot'); break;
+      case 'beam':  spawnBullet(ox+22,oy,1020,0,'laser'); break;                      // 黄金：基本貫通光線
+      case 'twin':  spawnBullet(ox+20,oy-4,760,0,'shot'); spawnBullet(ox+20,oy+4,760,0,'shot'); break; // 紫電：二連
+      default:      spawnBullet(ox+20,oy,720,0,'shot');                               // ハヤテ/玄武：直進
+    }
     if(player.double) spawnBullet(ox+16,oy-6,560,-560,'shot');
   }
   if(player.missile){
@@ -576,6 +672,7 @@ const game = {
   bossWarning:0,
   pendingBoss:null,
   loop:1, manual:false, cheat:false, // 周回（ALL CLEARでループ）
+  shipIndex: +(localStorage.getItem('gradia_ship')||0), // 選択中の自機
   score:0,
   hi: + (localStorage.getItem('gradia_hi')||0),
   lives:3,
@@ -592,6 +689,7 @@ initStars();
 function startGame(){
   game.state='play'; game.paused=false; game.stageIndex=0; game.loop=1;
   game.score=0; game.lives = game.cheat ? 9 : 3;
+  applyShip();        // 選択した自機の性能・ショットを反映
   beginStage(0);
   BGM.tryStart();
 }
@@ -719,7 +817,7 @@ function updatePlayer(dt){
     if(player.laser){
       if(player.shootCd<=0){ doFire(); player.shootCd=0.085; }
     }else{
-      if(player.shootCd<=0){ doFire(); player.shootCd=0.14; }
+      if(player.shootCd<=0){ doFire(); player.shootCd=player.shipShootCd; }
     }
   }
 }
@@ -906,7 +1004,7 @@ function collisions(){
     for(const e of enemies){
       if(e.hp<=0) continue;
       if(aabb(b,e)){
-        e.hp-=b.kind==='laser'?1:1;
+        e.hp-=(b.kind==='heavy'?2:1);
         SFX.hit();
         if(!b.pierce){ b.life=0; }
         spawnRing(b.x,b.y,'#fff');
@@ -1074,15 +1172,8 @@ function drawPlayer(){
     ctx.strokeStyle='rgba(84,176,255,'+(0.5+0.3*Math.sin(performance.now()/120))+')';
     ctx.lineWidth=3; ctx.beginPath(); ctx.arc(0,0,28,0,6.283); ctx.stroke();
   }
-  // 機体
-  ctx.fillStyle='#dfeaff';
-  ctx.beginPath();
-  ctx.moveTo(22,0); ctx.lineTo(2,-9); ctx.lineTo(-18,-9);
-  ctx.lineTo(-12,0); ctx.lineTo(-18,9); ctx.lineTo(2,9); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#5aa0ff';
-  ctx.beginPath(); ctx.moveTo(-2,-9); ctx.lineTo(-16,-16); ctx.lineTo(-10,-9); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(-2,9); ctx.lineTo(-16,16); ctx.lineTo(-10,9); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#ffd36b'; ctx.beginPath(); ctx.arc(4,0,3,0,6.283); ctx.fill();
+  // 機体（選択中の自機を描画）
+  curShip().draw();
   // バーナー
   ctx.fillStyle='rgba(120,200,255,'+(0.5+0.4*Math.random())+')';
   ctx.beginPath(); ctx.moveTo(-18,-5); ctx.lineTo(-30-Math.random()*8,0); ctx.lineTo(-18,5); ctx.closePath(); ctx.fill();
@@ -1096,6 +1187,10 @@ function drawBullets(){
       ctx.shadowColor='#54b0ff'; ctx.shadowBlur=8;
       ctx.fillRect(b.x-b.w/2,b.y-b.h/2,b.w,b.h);
       ctx.shadowBlur=0;
+    }else if(b.kind==='heavy'){
+      ctx.fillStyle='#ffb24b'; ctx.shadowColor='#ff7b3b'; ctx.shadowBlur=10;
+      ctx.beginPath(); ctx.ellipse(b.x,b.y,b.w/2,b.h/2,0,0,6.283); ctx.fill();
+      ctx.shadowBlur=0; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(b.x,b.y,2.5,0,6.283); ctx.fill();
     }else{
       ctx.fillStyle='#ffe8a0';
       ctx.fillRect(b.x-b.w/2,b.y-b.h/2,b.w,b.h);
@@ -1340,44 +1435,66 @@ function drawAllClear(){
 }
 function drawTitle(){
   ctx.textAlign='center';
-  // 大きめロゴ
-  ctx.fillStyle='#dfeaff'; ctx.font='bold 64px "Courier New",monospace';
-  ctx.fillText('G R A D I A', W/2, H/2-90);
-  ctx.fillStyle='#54b0ff'; ctx.font='bold 22px "Courier New",monospace';
-  ctx.fillText('── 銀翼戦記 ──', W/2, H/2-52);
-  // 自機の飾り
-  ctx.save(); ctx.translate(W/2-150, H/2-72); ctx.scale(1.4,1.4);
-  ctx.fillStyle='#dfeaff'; ctx.beginPath();
-  ctx.moveTo(22,0); ctx.lineTo(2,-9); ctx.lineTo(-18,-9); ctx.lineTo(-12,0); ctx.lineTo(-18,9); ctx.lineTo(2,9); ctx.closePath(); ctx.fill();
-  ctx.restore();
+  const now=performance.now();
+  // ロゴ
+  ctx.fillStyle='#dfeaff'; ctx.font='bold 50px "Courier New",monospace';
+  ctx.fillText('G R A D I A', W/2, 68);
+  ctx.fillStyle='#54b0ff'; ctx.font='bold 18px "Courier New",monospace';
+  ctx.fillText('── 銀翼戦記 ──', W/2, 96);
 
-  ctx.fillStyle='#9bd0ff'; ctx.font='16px "Courier New",monospace';
-  const lines=[
-    '横スクロール・シューティング',
-    '',
-    '移動 : 矢印キー / WASD',
-    'ショット : Z または SPACE（長押しでレーザー継続）',
-    '武装発動 : X または SHIFT  ←  Pカプセルでゲージを進め、狙った装備で発動',
-    'ポーズ : P',
-    '',
-    'SPEED→MISSILE→DOUBLE→LASER→OPTION→SHIELD',
-    'Pカプセルは赤い編隊（◯印）を全滅させると出現',
-  ];
-  lines.forEach((l,i)=>ctx.fillText(l, W/2, H/2-10+i*24));
-  const blink=Math.floor(performance.now()/500)%2===0;
-  if(blink){ ctx.fillStyle='#ffd36b'; ctx.font='bold 22px "Courier New",monospace';
-    ctx.fillText('PRESS  ENTER  /  TAP  TO  START', W/2, H-86); }
-  // 最強モード切替（C キー）
-  if(game.cheat){
-    const p=0.6+0.4*Math.sin(performance.now()/180);
-    ctx.globalAlpha=p; ctx.fillStyle='#ff5bd0'; ctx.font='bold 18px "Courier New",monospace';
-    ctx.fillText('★ 最強モード ON ★  （無敵＋全武装MAX＋残機9）', W/2, H-58); ctx.globalAlpha=1;
-  }else{
-    ctx.fillStyle='#7fa6d8'; ctx.font='14px "Courier New",monospace';
-    ctx.fillText('C キー → 最強モード（チート）  ／  M キー → 説明書', W/2, H-58);
+  const s=curShip();
+  // 自機選択パネル
+  ctx.fillStyle='rgba(20,36,62,0.5)'; ctx.fillRect(W/2-260,118,520,214);
+  ctx.strokeStyle='#2c466e'; ctx.lineWidth=1.5; ctx.strokeRect(W/2-260,118,520,214);
+  ctx.fillStyle='#ffd36b'; ctx.font='bold 15px "Courier New",monospace';
+  ctx.fillText('自機をえらぶ  （←  →）', W/2, 144);
+
+  // 機体プレビュー（大きく）
+  ctx.save(); ctx.translate(W/2, 200); ctx.scale(3.4,3.4);
+  ctx.fillStyle='rgba(120,200,255,'+(0.4+0.3*Math.sin(now/120))+')';
+  ctx.beginPath(); ctx.moveTo(-18,-4); ctx.lineTo(-30,0); ctx.lineTo(-18,4); ctx.closePath(); ctx.fill();
+  s.draw();
+  ctx.restore();
+  // 左右の矢印
+  const ap=0.5+0.5*Math.sin(now/250);
+  ctx.fillStyle='rgba(255,211,107,'+ap+')'; ctx.font='bold 40px "Courier New",monospace';
+  ctx.fillText('‹', W/2-215, 212); ctx.fillText('›', W/2+215, 212);
+
+  // 機体名・コンセプト
+  ctx.fillStyle=s.accent; ctx.font='bold 22px "Courier New",monospace';
+  ctx.fillText(s.name, W/2, 258);
+  ctx.fillStyle='#9bd0ff'; ctx.font='13px "Courier New",monospace';
+  ctx.fillText(s.concept, W/2, 280);
+  // ステータスバー
+  function bar(label,val,y,col){
+    ctx.textAlign='right'; ctx.fillStyle='#7fa6d8'; ctx.font='12px "Courier New",monospace';
+    ctx.fillText(label, W/2-66, y+4);
+    for(let i=0;i<5;i++){ ctx.fillStyle = i<val?col:'#2c466e'; ctx.fillRect(W/2-58+i*26,y-7,22,10); }
+    ctx.textAlign='center';
   }
+  bar('SPEED', s.speed, 302, '#63f3ff');
+  bar('POWER', s.fire,  322, '#ff8a3b');
+  // 選択ドット
+  for(let i=0;i<SHIPS.length;i++){
+    ctx.fillStyle = i===game.shipIndex?'#ffd36b':'#2c466e';
+    ctx.beginPath(); ctx.arc(W/2-(SHIPS.length-1)*9+i*18, 350, i===game.shipIndex?4:3, 0,6.283); ctx.fill();
+  }
+
+  // 操作（簡潔）
+  ctx.fillStyle='#7fa6d8'; ctx.font='12px "Courier New",monospace';
+  ctx.fillText('移動:矢印/WASD   ショット:Z(長押し)   武装:X   説明:M', W/2, 380);
+  // START点滅
+  const blink=Math.floor(now/500)%2===0;
+  if(blink){ ctx.fillStyle='#ffd36b'; ctx.font='bold 22px "Courier New",monospace';
+    ctx.fillText('PRESS  ENTER  /  TAP  TO  START', W/2, 414); }
+  // 最強モード／説明
+  if(game.cheat){ const p=0.6+0.4*Math.sin(now/180);
+    ctx.globalAlpha=p; ctx.fillStyle='#ff5bd0'; ctx.font='bold 16px "Courier New",monospace';
+    ctx.fillText('★ 最強モード ON ★  無敵＋全武装＋残機9', W/2, 442); ctx.globalAlpha=1;
+  }else{ ctx.fillStyle='#7fa6d8'; ctx.font='13px "Courier New",monospace';
+    ctx.fillText('C → 最強モード　M → 説明書', W/2, 442); }
   ctx.fillStyle='#3a5a8a'; ctx.font='12px "Courier New",monospace';
-  ctx.fillText('HI-SCORE  '+String(game.hi).padStart(7,'0'), W/2, H-34);
+  ctx.fillText('HI-SCORE  '+String(game.hi).padStart(7,'0'), W/2, 466);
   ctx.textAlign='left';
 }
 
